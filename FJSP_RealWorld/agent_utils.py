@@ -15,14 +15,21 @@ def select_action(p, cadidate, memory,log_prob):
 def select_action1(p, cadidate):
     dist = Categorical(p.squeeze())
     s = dist.sample()
-    action = []
     log_a = dist.log_prob(s)
 
+    if s.dim() == 0:
+        if cadidate.dim() == 1:
+            a = cadidate[s.item()]
+        else:
+            a = cadidate[0][s.item()]
+        return a.unsqueeze(0), s.unsqueeze(0), log_a.unsqueeze(0)
+
+    action = []
     for i in range(s.size(0)):
         a = cadidate[i][s[i]]
         action.append(a)
-    action = torch.stack(action,0)
-    return action, s,log_a
+    action = torch.stack(action, 0)
+    return action, s, log_a
 
 
 def select_action2(p):
