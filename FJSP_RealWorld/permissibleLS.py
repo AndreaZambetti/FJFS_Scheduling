@@ -1,3 +1,9 @@
+"""Helpers that shove an operation earlier on a machine if the gap exists.
+
+The expressions come from scheduling theory, but the comments translate them
+into everyday explanations (machine timeline, job timeline, free gaps, etc.).
+"""
+
 from Params import configs
 import numpy as np
 
@@ -5,6 +11,7 @@ import torch
 
 def permissibleLeftShift(a,mch_a, durMat, mchMat, mchsStartTimes, opIDsOnMchs,mchEndTime,row,col,first_col,last_col):#
     #a=action, durMat=self.dur, mchMat=mchaine, mchsStartTimes=self.mchsStartTimes, opIDsOnMchs=self.opIDsOnMchs
+    # Step 1: figure out when the job and the machine become available.
 
     jobRdyTime_a, mchRdyTime_a = calJobAndMchRdyTimeOfa(a,mch_a, mchMat, durMat, mchsStartTimes, opIDsOnMchs,row,col,first_col,last_col)
 
@@ -15,6 +22,7 @@ def permissibleLeftShift(a,mch_a, durMat, mchMat, mchsStartTimes, opIDsOnMchs,mc
     #print('starttimesformchofa',startTimesForMchOfa)
     opsIDsForMchOfa = opIDsOnMchs[mch_a]#机器mch_a处理task的数组
     flag = False
+    # Any machine slot that starts after the job is ready could hold us.
     possiblePos = np.where(jobRdyTime_a < startTimesForMchOfa)[0]
 
     #machine中以调度的task的开始时间大于job中action的上一个task的完工时间
@@ -38,6 +46,8 @@ def putInTheEnd(a, jobRdyTime_a, mchRdyTime_a, startTimesForMchOfa, opsIDsForMch
     # index = first position of -config.high in startTimesForMchOfa
     # print('Yes!OK!')
 
+    # No gap was free, so we tack the operation onto the tail of the machine
+    # timeline and start it once both job and machine are ready.
     index = np.where(startTimesForMchOfa == -configs.high)[0][0]
     startTime_a = max(jobRdyTime_a, mchRdyTime_a)
 
@@ -63,12 +73,14 @@ def calLegalPos(dur_a,mch_a,jobRdyTime_a, durMat, possiblePos, startTimesForMchO
         col1 = opsIDsForMchOfa[possiblePos[0]-1] - first_col[row1]
 
 
+        # Earliest start must be after the previous machine job leaves.
         startTimeEarlst = max(jobRdyTime_a, startTimesForMchOfa[possiblePos[0]-1] + durMat[row1,col1][mch_a])
     else:
         startTimeEarlst = max(jobRdyTime_a,0)
 
     endTimesForPossiblePos = np.append(startTimeEarlst, (startTimesOfPossiblePos + durOfPossiblePos))[:-1]# end time for last ops don't care
 
+    # available gap = next start minus previous end
     possibleGaps = startTimesOfPossiblePos - endTimesForPossiblePos
 
     idxLegalPos = np.where(dur_a <= possibleGaps)[0]
@@ -83,6 +95,7 @@ def putInBetween(a, idxLegalPos, legalPos, endTimesForPossiblePos, startTimesFor
     earlstPos = legalPos[0]
     startTime_a = endTimesForPossiblePos[earlstIdx]
     # print('endTimesForPossiblePos:', endTimesForPossiblePos)
+    # Slide everything one slot to create room for our new start time.
     startTimesForMchOfa[:] = np.insert(startTimesForMchOfa, earlstPos, startTime_a)[:-1]
     endtineformch0fa[:]=np.insert(endtineformch0fa, earlstPos, startTime_a+dur_a)[:-1]
     opsIDsForMchOfa[:] = np.insert(opsIDsForMchOfa, earlstPos, a)[:-1]
@@ -93,6 +106,7 @@ def putInBetween(a, idxLegalPos, legalPos, endTimesForPossiblePos, startTimesFor
 def calJobAndMchRdyTimeOfa(a, mch_a,mchMat, durMat, mchsStartTimes, opIDsOnMchs,row,col,first_col,last_col):
     #numpy.take（a，indices，axis = None，out = None，mode ='raise' ）取矩阵中所有元素的第a个元素
     # cal jobRdyTime_a
+    # Job ready time = when the previous operation for this job finishes.
     if col != 0:
         jobPredecessor = a - 1
 
@@ -129,6 +143,7 @@ def calJobAndMchRdyTimeOfa(a, mch_a,mchMat, durMat, mchsStartTimes, opIDsOnMchs,
 
         mchRdyTime_a = 0
 
+    # Return both clocks so the caller can place the operation correctly.
     return jobRdyTime_a, mchRdyTime_a
 
 

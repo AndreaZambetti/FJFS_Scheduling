@@ -1,6 +1,13 @@
-import gym
+"""Friendly notes: this module wraps the flexible job-shop into a Gym env.
+
+The goal is to keep the code approachable.  Comments lean on everyday words
+so it is easier to map the math to the scheduling story.
+"""
+
+
+import gymnasium as gym
 import numpy as np
-from gym.utils import EzPickle
+from gymnasium.utils import EzPickle
 from uniform_instance import override
 from updateEndTimeLB import calEndTimeLB,calEndTimeLBm
 from Params import configs
@@ -13,9 +20,12 @@ import torch
 import time
 
 class FJSP(gym.Env, EzPickle):
+    """Environment that lets an agent build a schedule step-by-step."""
+
     def __init__(self,n_j,n_m,EachJob_num_operation):
         EzPickle.__init__(self)
 
+        # Keep a few counters so we always know the size of the instance.
         self.step_count = 0
         self.number_of_jobs = n_j
         self.number_of_machines = n_m
@@ -25,6 +35,8 @@ class FJSP(gym.Env, EzPickle):
         # the task id for first column
         self.max_operation = EachJob_num_operation.max()
 
+        # "first" and "last" column markers help translate a flat index (0..N)
+        # into the familiar (job, operation) position.
         self.last_col = np.cumsum(EachJob_num_operation,-1) - 1
         self.first_col = np.cumsum(EachJob_num_operation,-1) - EachJob_num_operation
 
@@ -32,13 +44,15 @@ class FJSP(gym.Env, EzPickle):
         self.getNghbs = getActionNbghs
 
     def done(self):
-
+        # When every slot in the first sequence is filled we consider the batch
+        # finished, so the episode can end.
         if np.all(self.partial_sol_sequeence[0] >=0):
             return True
         return False
 
     @override
     def step(self, action,mch_a):
+        # Each batch item chooses one operation id plus the machine to run it on.
         # action is a int 0 - 224 for 15x15 for example
         t1 = time.time()
         feas, rewards, dones,masks,mch_masks = [],[], [], [],[]
@@ -48,6 +62,7 @@ class FJSP(gym.Env, EzPickle):
             if action[i] not in self.partial_sol_sequeence[i]:
 
                 # UPDATE BASIC INFO:
+                # Translate the flat task id into job row and operation column.
                 row = np.where(action[i] <= self.last_col[i])[0][0]
                 col = action[i] - self.first_col[i][row]
 
@@ -57,6 +72,7 @@ class FJSP(gym.Env, EzPickle):
                     self.step_count += 1
                 self.finished_mark[i,action[i]] = 1
 
+                # How long this operation lasts on the chosen machine.
                 self.dur_a = self.dur[i,row, col,mch_a[i]]
 
                 #action time
@@ -67,6 +83,7 @@ class FJSP(gym.Env, EzPickle):
                 # UPDATE STATE:
                 # permissible left shift 允许向左移动
 
+                # Try to move the operation as early as the rules allow.
                 startTime_a, flag = permissibleLeftShift(a=action[i], mch_a=mch_a[i], durMat=self.dur_cp[i], mchMat=self.mchMat[i],
                                                          mchsStartTimes=self.mchsStartTimes[i], opIDsOnMchs=self.opIDsOnMchs[i],mchEndTime=self.mchsEndTimes[i],row=row,col=col,first_col=self.first_col[i],last_col=self.last_col[i])
 
@@ -74,6 +91,8 @@ class FJSP(gym.Env, EzPickle):
 
                 # update omega or mask
 
+                # If there is another operation in this job unlock it, otherwise
+                # mark the job as finished so we do not pick it again.
                 if action[i] not in self.last_col[i]:
                     self.omega[i,row] += 1
                     self.job_col[i,row] += 1
@@ -98,6 +117,7 @@ class FJSP(gym.Env, EzPickle):
 
                 #self.LBs为所有task最快的完工时间
                 # adj matrix
+                # Refresh the graph edges so the policy stays in sync.
                 precd, succd = self.getNghbs(action[i], self.opIDsOnMchs[i])
 
                 self.adj[i, action[i]] = 0
@@ -156,6 +176,7 @@ class FJSP(gym.Env, EzPickle):
             for b,c in zip(self.up_mchendtime[i],range(self.number_of_machines)):
                 self.up_mchendtime[i][c] = [0 if i < 0 else i for i in b]
             rewards.append(reward)'''
+            # Reward is better when we reduce the best-case completion time.
             reward = -(self.LBm[i].max() - self.max_endTime[i])
             if reward == 0:
                 reward = configs.rewardscale
@@ -188,6 +209,7 @@ class FJSP(gym.Env, EzPickle):
             last_col = np.arange(start=0, stop=self.number_of_tasks, step=1).reshape(self.number_of_jobs, -1)[:, -1]
             self.last_col.append(last_col)
         self.first_col = np.array(self.first_col)'''
+        # job_col remembers which operation index is next for each job.
         self.job_col = np.zeros(shape=(self.batch_sie,self.number_of_jobs), dtype=np.int32)
 
         self.last_col = np.array(self.last_col)
@@ -196,13 +218,15 @@ class FJSP(gym.Env, EzPickle):
         #self.num_operation = np.full(shape=(self.number_of_jobs), fill_value=self.number_of_machines)
         self.dispatched_num_opera = np.zeros(shape=(self.batch_sie,self.number_of_jobs)).astype(int)
 
-        self.mchMat = -1 * np.ones((self.batch_sie,self.number_of_jobs,self.max_operation), dtype=np.int)
+        # mchMat keeps the machine assignment per operation (filled during step).
+        self.mchMat = -1 * np.ones((self.batch_sie,self.number_of_jobs,self.max_operation), dtype=int)
 
         self.dur = data.astype(np.single)#single单精度浮点数
         self.dur_cp = deepcopy(self.dur)
         # record action history
 
-        self.partial_sol_sequeence = -1 * np.ones((self.batch_sie,self.number_of_tasks),dtype=np.int)
+        # partial_sol_sequence is our running log of scheduled operations.
+        self.partial_sol_sequeence = -1 * np.ones((self.batch_sie,self.number_of_tasks),dtype=int)
 
         self.flags = []
         self.posRewards = np.zeros(self.batch_sie)
@@ -257,6 +281,7 @@ class FJSP(gym.Env, EzPickle):
                 dur_mean = []
                 dur_max = []
                 for j in range(self.max_operation):
+                    # Grab the feasible machine times (>0) for this operation.
                     durmch = self.dur[t][i][j][np.where(self.dur[t][i][j] > 0)]
                     self.mask_mch[t][i][j] = [1 if i <= 0 else 0 for i in self.dur_cp[t][i][j]]
                     self.dur[t][i][j] = [durmch.mean() if i <= 0 else i for i in self.dur[t][i][j]]
@@ -363,4 +388,5 @@ class FJSP(gym.Env, EzPickle):
             dur = self.op_dur
 
         #self.mask_mch = self.mask_mch.reshape(self.batch_sie,-1,self.mask_mch.shape[-1])
+        # Everything above sets the stage; now hand the first observation back.
         return self.adj, fea, self.omega, self.mask,self.mask_mch,dur,self.mch_time,self.job_time
