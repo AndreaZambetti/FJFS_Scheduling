@@ -4,8 +4,8 @@ parser = argparse.ArgumentParser(description='Arguments for ppo_jssp')
 # args for device
 parser.add_argument('--device', type=str, default="cuda", help='Number of jobs of instances')
 # args for env
-parser.add_argument('--n_j', type=int, default=15, help='Number of jobs of instance')
-parser.add_argument('--n_m', type=int, default=15, help='Number of machines instance')
+parser.add_argument('--n_j', type=int, default=3, help='Number of jobs of instance')
+parser.add_argument('--n_m', type=int, default=2, help='Number of machines instance')
 parser.add_argument('--rewardscale', type=float, default=0., help='Reward scale for positive rewards')
 parser.add_argument('--init_quality_flag', type=bool, default=False, help='Flag of whether init state quality is 0, True for 0')
 parser.add_argument('--low', type=int, default=-99, help='LB of duration')
@@ -45,5 +45,7 @@ parser.add_argument('--eps_clip', type=float, default=0.2, help='clip parameter 
 parser.add_argument('--vloss_coef', type=float, default=1, help='critic loss coefficient')
 parser.add_argument('--ploss_coef', type=float, default=2, help='policy loss coefficient')
 parser.add_argument('--entloss_coef', type=float, default=0.01, help='entropy loss coefficient')
+# setup penalty (adds a negative term to reward proportional to setup minutes)
+parser.add_argument('--setup_penalty_alpha', type=float, default=5.0, help='Penalty multiplier applied to setup minutes in reward')
 
 configs = parser.parse_args()

@@ -74,6 +74,23 @@ class FJSP(gym.Env, EzPickle):
 
                 # How long this operation lasts on the chosen machine.
                 self.dur_a = self.dur[i,row, col,mch_a[i]]
+                # Opzionale: aggiungi tempo di setup se si cambia attrezzatura
+                # Richiede che self.op_tools (batch, n_job, max_op) e
+                # self.tool_setup_minutes (num_tools,) siano state impostate esternamente.
+                setup_add = 0
+                try:
+                    req_tool = int(self.op_tools[i, row, col]) if hasattr(self, 'op_tools') else -1
+                    if hasattr(self, 'tool_setup_minutes') and req_tool >= 0:
+                        curr_tool = int(self.current_tool[i, mch_a[i]]) if hasattr(self, 'current_tool') else -1
+                        if curr_tool != req_tool:
+                            setup_add = float(self.tool_setup_minutes[req_tool])
+                            # Aggiorna la durata effettiva per questa operazione su questa macchina
+                            self.dur_a = self.dur_a + setup_add
+                            # Aggiorna anche la matrice delle durate per permettere al left-shift di considerare il setup
+                            self.dur_cp[i, row, col, mch_a[i]] = self.dur_cp[i, row, col, mch_a[i]] + setup_add
+                except Exception:
+                    # Se qualcosa va storto (es. array non presenti), ignora il setup
+                    setup_add = 0
 
                 #action time
 
@@ -100,6 +117,10 @@ class FJSP(gym.Env, EzPickle):
                     self.mask[i,row] = 1
 
                 self.temp1[i,row, col] = startTime_a + self.dur_a#完工时间
+
+                # Se gestiamo il setup, aggiorna il tool corrente della macchina utilizzata
+                if setup_add and hasattr(self, 'current_tool') and 'req_tool' in locals() and req_tool >= 0:
+                    self.current_tool[i, mch_a[i]] = req_tool
 
                 #temp1.shape()
 
@@ -178,6 +199,12 @@ class FJSP(gym.Env, EzPickle):
             rewards.append(reward)'''
             # Reward is better when we reduce the best-case completion time.
             reward = -(self.LBm[i].max() - self.max_endTime[i])
+            # Penalità di setup opzionale: scoraggia cambi attrezzatura
+            try:
+                if 'setup_add' in locals() and setup_add > 0:
+                    reward -= configs.setup_penalty_alpha * setup_add
+            except Exception:
+                pass
             if reward == 0:
                 reward = configs.rewardscale
                 self.posRewards[i] += reward
@@ -372,6 +399,10 @@ class FJSP(gym.Env, EzPickle):
         self.mask = np.full(shape=(self.batch_sie,self.number_of_jobs), fill_value=0, dtype=bool)
 
         self.mch_time = np.zeros((self.batch_sie,self.number_of_machines))
+        # Stato opzionale per il setup attrezzature: tool corrente su ciascuna macchina
+        # -1 significa nessun tool montato. Viene utilizzato solo se vengono
+        #   fornite anche self.op_tools e self.tool_setup_minutes dall'esterno.
+        self.current_tool = -1 * np.ones((self.batch_sie, self.number_of_machines), dtype=int)
         #start time of operations on machines
         self.mchsStartTimes = -configs.high * np.ones((self.batch_sie,self.number_of_machines,self.number_of_tasks))
         self.mchsEndTimes=-configs.high * np.ones((self.batch_sie,self.number_of_machines,self.number_of_tasks))

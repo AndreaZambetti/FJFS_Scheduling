@@ -1,0 +1,15 @@
+{
+  "machines": ["MAC1", "MAC2"],
+  "tools": {
+    "ATT1": {"name": "Foratura", "setup_minutes": 200, "process_minutes_per_piece": 5},
+    "ATT2": {"name": "Taglio", "setup_minutes": 12, "process_minutes_per_piece": 8},
+    "ATT3": {"name": "Lucidatura", "setup_minutes": 15, "process_minutes_per_piece": 6}
+  },
+  "lots": [
+    {"id": "L1", "tool": "ATT1", "pieces": 50},
+    {"id": "L2", "tool": "ATT2", "pieces": 15},
+    {"id": "L3", "tool": "ATT3", "pieces": 25},
+    {"id": "L4", "tool": "ATT1", "pieces": 10},
+    {"id": "L5", "tool": "ATT2", "pieces": 30}
+  ]
+}

@@ -1,55 +1,162 @@
-# End-to-end-DRL-for-FJSP
+# Flexible Job-Shop Scheduling con DRL (FJSP_RealWorld)
 
-#---------------------------------------------------------------------------------
+Questa repository contiene un’implementazione end-to-end di un algoritmo di *Deep Reinforcement Learning* pensato per risolvere problemi reali di **Flexible Job-Shop Scheduling (FJSP)**.  
+Il focus della documentazione è sulla cartella `FJSP_RealWorld`, che offre:
+- un ambiente Gym personalizzato per trasformare istanze industriali (`*.fjs`) in uno scenario RL;
+- due policy neurali (selezione operazione e selezione macchina) addestrate con PPO multi-attore;
+- strumenti per validare modelli pre-addestrati e per avviare nuovi processi di training.
 
-2023/02/15 I've revised the 'PPOwithValue.py' so that it's suitable for a higher version of Pytorch. 
+---
 
-2022/11/03 torch == 1.4.0
+## 1. Panoramica dell’Algoritmo
 
-2022/09/24 I've uploaded the FJSP_realworld files, you can download it to run the 'validation_realWorld.py' to test on bechmark instances. In particular, you can download more bechmark instances and saved models to test, and in this project I only upload one saved model and benchmark. 
+### Stato
+Ogni stato codifica l’avanzamento del programma produttivo tramite:
+- grafo disgiuntivo dell’istanza (`adj`);
+- feature dei nodi: *Lower Bound* cumulativi e flag “operazione completata” (`fea`);
+- maschere delle operazioni disponibili (`omega`, `mask`);
+- maschere delle macchine ammissibili per ogni operazione (`mask_mch`).
 
-You can download the "FJSP_MultiPPO" project to run 'PPOwithValue' file to train the policies, run the 'validation' file to test/validate on random generated instances.
+Queste informazioni sono generate dall’ambiente `FJSP_RealWorld/FJSP_Env1.py`.
 
-You can download the other project named 'FJSP-benchmarks' in my github account to test the trained model on real-world instances.
+### Azioni
+L’agente sceglie due azioni per step:
+1. **Operazione da processare**: policy `Job_Actor` sfrutta un encoder GIN per produrre le probabilità sulle operazioni ammissibili.
+2. **Macchina da assegnare**: policy `Mch_Actor` valuta le macchine compatibili considerando tempi residui e embedding dell’operazione scelta.
 
-#----------------------------------------------------------------------------------
+### Reward
+Il reward è il miglioramento (negativo se peggiorativo) del *Lower Bound* massimo del makespan. In questo modo la policy è incentivata a ridurre il tempo di completamento globale.
 
-2022/09/12 Some issues are resolveed, please download the latest code. If you have any question please feel free to mail to me via: kunlei@my.swjtu.edu.cn.
+### Algoritmo di Training
+La classe `PPO` in `FJSP_RealWorld/PPOwithValue.py` addestra congiuntamente i due attori e condivide un critico. Il training avviene su batch multipli di istanze, con:
+- rollout memorizzato in `Memory`;
+- normalizzazione dei vantaggi;
+- aggiornamento PPO (clipping) su politiche e critico;
+- scheduler di learning rate opzionale.
 
-#----------------------------------------------------------------------------------
+---
 
-This is the code for our published paper: 'A Multi-action Deep Reinforcement Learning Framework for Flexible Job-shop Scheduling Problem'; Everyone is welcome to use this code and cite our paper:
+## 2. Requisiti
 
-{Kun Lei, Peng Guo, Wenchao Zhao, Yi Wang, Linmao Qian, Xiangyin Meng, Liansheng Tang,
-A multi-action deep reinforcement learning framework for flexible Job-shop scheduling problem,
-Expert Systems with Applications,
-Volume 205,
-2022,
-117796,
-ISSN 0957-4174,
-https://doi.org/10.1016/j.eswa.2022.117796.
-(https://www.sciencedirect.com/science/article/pii/S0957417422010624)}
+| Componente | Versione consigliata |
+|------------|----------------------|
+| Python     | 3.8 – 3.11           |
+| PyTorch    | ≥ 1.10 (CUDA opzionale) |
+| Gymnasium  | ≥ 0.27               |
+| NumPy      | ≥ 1.21               |
+| Matplotlib | per grafici Gantt (opzionale) |
 
-This work can be extend to solve other type of scheduling problems which can be represented by disjunctive graph, e.g., flow shop scheduling problem, dynamic FJSP etc., or FJSP with other objective, e.g., mean comletion time and sequence dependence & setup time. 
+Installa le dipendenze principali:
 
-The proposed multi-PPO algorithm can be extend to solve other multi-action decision needed combinatorial optimization problem.
+```bash
+python -m venv .venv
+source .venv/bin/activate  # su Windows: .venv\Scripts\activate
+pip install torch gymnasium numpy matplotlib
+```
 
+---
 
-# Running the code
-You can run the 'PPOwithValue' file to train the policies, run the 'validation' file to test/validate on random generated instances.
+## 3. Struttura della cartella `FJSP_RealWorld`
 
-# Motivation 
-Most traditional methods, including exact methods based on mathematical programming and metaheuristics, cannot apply to large FJSP instances or real-time FJSP instances due to their time complexity. Some researchers have used DRL to solve combinatorial optimization problems and achieved good results, but FJSP has received less attention. Some DRL-based methods in solving FJSP are designed to select composite dispatching rules instead of directly finding scheduling solutions, whose performance depends on the design of dispatching rules. To the best of our knowledge, there is no research to solve the FJSP via multiple action end-to-end DRL framework without predetermined dispatching rules. 
+```
+FJSP_RealWorld/
+├─ FJSP_Env1.py              # Ambiente RL per istanze reali
+├─ PPOwithValue.py           # Implementazione PPO multi-attore
+├─ Params.py                 # Iperparametri globali (n° job/machine, LR, ecc.)
+├─ validation_realWorld.py   # Script di validazione su benchmark .fjs
+├─ models/                   # Moduli di rete (GIN, MLP attori, attenzione)
+├─ DataRead.py               # Parser per file benchmark .fjs
+├─ utils/                    # Funzioni di supporto (log, tensori, ecc.)
+├─ saved_network/            # Checkpoint pre-addestrati (policy_job.pth, policy_mch.pth)
+└─ FJSSPinstances/           # Benchmark di esempio (.fjs)
+```
 
-In this paper, we proposed a novel end-to-end model-free DRL architecture on FJSP and demonstrated that it yields superior performance in terms of solution quality and efficiency. The proposed model-free DRL architecture can be directly applied to arbitrary FJSP scenarios without modeling the environment in advance. That is to say, the transition probability distribution (and the reward function) associated with the Markov decision process (MDP) is not explicitly defined when invoking the environment. Meanwhile, based on the advantages of our design of policy networks, our architecture is not bounded by the instance size
+---
 
-# Graph neural network for disjunctive graph of FJSP
-The disjunctive graphprovides a complete view of the scheduling states containing numerical and structural information, such as the precedence constraints, processing order on each machine, compatible machine set for each operation, and the processing time of a compatible machine for each operation. It is crucial to extract all state information embedded in the disjunctive graph to achieve effective scheduling performance. It motivates us to embed the complex graph state by exploiting a graph neural network (GNN). We used the Graph Isomorphism Network (GIN) to encode the disjunctive graph.
+## 4. Utilizzo dei Modelli Pre-addestrati
 
-# Deep reinforcement learning algorithm 
-To cope with this kind of multi-action reinforcement problem, we proposed a multi-Proximal Policy Optimization (multi-PPO) algorithm that takes a multiple actor-critic architecture and adopts PPO as its policy optimization method for learning the two sub-policies. The PPO algorithm is a state-of-the-art policy gradient approach with an actor-critic style, which is widely used to deal with both discrete and continuous control tasks . However, the PPO algorithm cannot be directly used to handle a multi-action task since it generally contains one actor to learn one policy that can only control a single action at each timestep. By contrast, the proposed multi-PPO architecture includes two actor networks (job operation and machine encoder-decoders as the two actor networks, respectively).
- 
-# Cite us
-For open access source, please cite the work correctly!!!
+### 4.1 Validazione su Benchmark
+Per calcolare il makespan utilizzando i checkpoint forniti:
 
+```bash
+cd FJSP_RealWorld
+python validation_realWorld.py \
+  --Pn_j 15 --Pn_m 15 \
+  --Nn_j 15 --Nn_m 15 \
+  --n_vali 1 \
+  --seed 200
+```
 
+Lo script:
+1. carica `policy_job.pth` e `policy_mch.pth` da `saved_network/FJSP_J15M15/best_value0/`;  
+2. costruisce il batch di durate a partire dal file `.fjs`;  
+3. esegue il rollout greedy e stampa il makespan risultante.
+
+Puoi sostituire i file `.fjs` modificando il percorso dentro `validation_realWorld.py` (funzione `test`).
+
+### 4.2 Rollout Dettagliato e Debug
+Lo script `run_example.py` mostra passo passo la schedulazione di `HurinkVdata39.fjs`. Modifica `instance_path` per puntare ad altre istanze e `checkpoint_root` per usare modelli diversi. L’output include:
+- operazione e macchina scelte a ogni step;
+- reward ottenuto;
+- makespan finale.
+
+---
+
+## 5. Training su Dati Aziendali
+
+1. **Preparazione dati**  
+   - Converte il tuo processo produttivo in formato `.fjs` (numero job, operazioni, macchine compatibili e tempi di lavorazione).  
+   - Salva i file in `FJSP_RealWorld/FJSSPinstances/<nome>/`.
+
+2. **Configurazione Iperparametri**  
+   Aggiorna `Params.py` con il numero di job/machine su cui addestrare (`n_j`, `n_m`) e scegli learning rate, batch size, numero di episodi (`max_updates`).
+
+3. **Dataset di Training**  
+   Puoi riutilizzare `validation_realWorld.py` come esempio per caricare le istanze: crea un *DataLoader* che produca tensori `durations` con shape `(batch, n_job, max_op, n_machine)` (usa `DataRead.py` come riferimento).
+
+4. **Avvio Training**  
+   Usa la classe `PPO` in `PPOwithValue.py`:  
+   - istanzia l’ambiente `FJSP` con `EachJob_num_operation`;  
+   - esegui rollouts, memorizza le transizioni in `Memory`;  
+   - chiama `ppo.update(memory, epoch)` a fine batch.  
+
+5. **Salvataggio Modelli**  
+   Salva periodicamente `policy_job.state_dict()` e `policy_mch.state_dict()` in `FJSP_RealWorld/saved_network/<tuo_run>/`.
+
+---
+
+## 6. Personalizzazioni
+
+| Esigenza | Dove intervenire |
+|----------|------------------|
+| Feature aggiuntive | Estendi il vettore restituito da `FJSP_Env1.reset()` (ad es. aggiunta di backlog per job). Aggiorna `input_dim` in `Params.py` e l’encoder in `models/PPO_Actor1.py`. |
+| Obiettivi diversi | Modifica il calcolo del reward in `FJSP_Env1.step()` per riflettere KPI aziendali (es. tardiness, energy cost). |
+| Vincoli macchina | Adatta `mask_mch` e la logica di filtro in `min_job_machine_time.py` o nelle regole `dispatichRule.py`. |
+| Euristiche ibride | Passa `rule=<nome>` a `env.reset(...)` per abilitare dispatching rules custom (ad es. `FIFO_SPT`, `MOPNR_EET`). |
+
+---
+
+## 7. Troubleshooting
+
+- **Il modello seleziona macchine non consentite**: verifica che `mask_mch` sia correttamente inizializzato in `FJSP_Env1.reset()` e che la durata sia > 0 solo per macchine ammissibili.
+- **Reward fermo a zero**: controlla `configs.rewardscale` e assicurati che `LBm.max()` venga aggiornato (vedi `FJSP_Env1.step()`).
+- **Crashes per dimensioni mismatch**: allinea `configs.n_j`, `configs.n_m` ai dati reali prima di istanziare `PPO`.
+
+---
+
+## 8. Citazione
+
+Se utilizzi questo codice in ambito accademico o commerciale ti invitiamo a citare:
+
+> Kun Lei, Peng Guo, Wenchao Zhao, Yi Wang, Linmao Qian, Xiangyin Meng, Liansheng Tang.  
+> *A multi-action deep reinforcement learning framework for flexible Job-shop scheduling problem.*  
+> Expert Systems with Applications, Volume 205, 2022, 117796.
+
+---
+
+## 9. Contatti e Contributi
+
+- Per adattamenti aziendali puoi creare issue o PR con richieste specifiche (feature, supporto a nuovi formati).
+- Per segnalazioni di bug relativi al training su istanze reali allega sempre: file `.fjs`, parametri usati, log di training/validazione.
+
+Buon lavoro con il tuo progetto di scheduling!

@@ -149,7 +149,7 @@ def calJobAndMchRdyTimeOfa(a, mch_a,mchMat, durMat, mchsStartTimes, opIDsOnMchs,
 
 
 if __name__ == "__main__":
-    from FJSP_Env import FJSP
+    from FJSP_RealWorld.FJSP_Env1 import FJSP
     from uniform_instance import uni_instance_gen, FJSPDataset
     import time
     from torch.utils.data import DataLoader

@@ -1,7 +1,7 @@
 from mb_agg import *
 from Params import configs
 from copy import deepcopy
-from FJSP_Env import FJSP
+from FJSP_RealWorld.FJSP_Env1 import FJSP
 from mb_agg import g_pool_cal
 import copy
 from DataRead import getdata

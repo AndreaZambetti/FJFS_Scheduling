@@ -11,7 +11,8 @@ import numpy as np
 from Params import configs
 #from validation import validate
 import os
-device = torch.device(configs.device)
+# Force device to CPU for Mac compatibility (sparse tensors not supported on MPS)
+device = torch.device("cpu")
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import LambdaLR
 

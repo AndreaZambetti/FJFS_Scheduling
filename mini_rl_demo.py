@@ -20,7 +20,7 @@ PKG_ROOT = os.path.join(ROOT, "FJSP_RealWorld")
 if PKG_ROOT not in sys.path:
     sys.path.append(PKG_ROOT)
 
-from FJSP_RealWorld.FJSP_Env import FJSP
+from FJSP_RealWorld.FJSP_Env1 import FJSP
 
 
 def main():
